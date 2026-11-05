@@ -183,9 +183,11 @@
     <ClCompile Include="src\sys\dump.cpp" />
     <ClCompile Include="src\sys\kernel.cpp" />
     <ClCompile Include="src\util\file.cpp" />
+    <ClCompile Include="src\vgk\vgk_patcher.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\arch\arch.hpp" />
+    <ClInclude Include="src\vgk\vgk_patcher.hpp" />
     <ClInclude Include="src\cmd\alias.hpp" />
     <ClInclude Include="src\cmd\cmd.hpp" />
     <ClInclude Include="src\hook\arena.hpp" />

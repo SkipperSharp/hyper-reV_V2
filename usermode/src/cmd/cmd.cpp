@@ -8,6 +8,7 @@
 #include "../sys/dump.hpp"
 #include "../sys/kernel.hpp"
 #include "../util/log.hpp"
+#include "../vgk/vgk_patcher.hpp"
 
 #include <CLI/CLI.hpp>
 
@@ -442,6 +443,98 @@ namespace
 		LOG_INFO("alias value: 0x{:X}", GET_U64(gva, alias_name));
 	}
 
+	// ============================================================================
+	// VGK Patcher Commands
+	// ============================================================================
+
+	CLI::App* init_vgkpp(CLI::App& app)
+	{
+		SUB(vgkpp, "apply VGK pattern patches with EPT split-view (invisible to CRC)");
+		return vgkpp;
+	}
+
+	void process_vgkpp(const CLI::App* const /*vgkpp*/)
+	{
+		vgk_patcher::patch_stats_t stats = {};
+		if (vgk_patcher::apply_pattern_patches(&stats))
+		{
+			LOG_INFO("[VGK] Pattern patches applied successfully");
+			LOG_INFO("[VGK] BTS: {} | Jumps: {} | Callbacks: {}",
+			         stats.bts_patterns, stats.jump_patterns, stats.callback_patterns);
+			LOG_INFO("[VGK] Total patched: {} | Failed: {}",
+			         stats.total_patched, stats.total_failed);
+		}
+		else
+		{
+			LOG_ERR("[VGK] Failed to apply pattern patches");
+		}
+	}
+
+	CLI::App* init_vgkppw(CLI::App& app)
+	{
+		SUB(vgkppw, "apply VGK pattern patches with direct write (visible to CRC)");
+		return vgkppw;
+	}
+
+	void process_vgkppw(const CLI::App* const /*vgkppw*/)
+	{
+		vgk_patcher::patch_stats_t stats = {};
+		if (vgk_patcher::apply_pattern_patches_direct(&stats))
+		{
+			LOG_INFO("[VGK] Direct pattern patches applied");
+			LOG_INFO("[VGK] Total patched: {} | Failed: {}",
+			         stats.total_patched, stats.total_failed);
+		}
+		else
+		{
+			LOG_ERR("[VGK] Failed to apply direct patches");
+		}
+	}
+
+	CLI::App* init_vgkrp(CLI::App& app)
+	{
+		SUB(vgkrp, "restore all VGK patches (callbacks + patterns)");
+		return vgkrp;
+	}
+
+	void process_vgkrp(const CLI::App* const /*vgkrp*/)
+	{
+		bool cb_ok = vgk_patcher::restore_all_callbacks();
+		bool pp_ok = vgk_patcher::restore_pattern_patches();
+		bool dp_ok = vgk_patcher::restore_pattern_patches_direct();
+
+		if (cb_ok && pp_ok && dp_ok)
+			LOG_INFO("[VGK] All patches restored");
+		else
+			LOG_ERR("[VGK] Some patches failed to restore");
+	}
+
+	CLI::App* init_vgki(CLI::App& app)
+	{
+		SUB(vgki, "show VGK info (base, size, timestamp)");
+		return vgki;
+	}
+
+	void process_vgki(const CLI::App* const /*vgki*/)
+	{
+		if (!vgk_patcher::initialize())
+		{
+			LOG_ERR("[VGK] Failed to initialize / vgk.sys not loaded");
+			return;
+		}
+
+		LOG_INFO("[VGK] Base: 0x{:X}", vgk_patcher::get_vgk_base());
+		LOG_INFO("[VGK] Size: 0x{:X}", vgk_patcher::get_vgk_size());
+		LOG_INFO("[VGK] TimeDateStamp: 0x{:X}", vgk_patcher::get_vgk_timedatestamp());
+
+		LOG_INFO("[VGK] Callbacks:");
+		for (const auto& cb : vgk_patcher::get_callbacks())
+		{
+			LOG_INFO("  {} @ +0x{:X} [{}]",
+			         cb.name, cb.offset, cb.is_patched ? "PATCHED" : "not patched");
+		}
+	}
+
 	void process(const std::string& command)
 	{
 		if (command.empty()) return;
@@ -471,6 +564,12 @@ namespace
 		const CLI::App* const kme  = init_kme(app);
 		const CLI::App* const dkm  = init_dkm(app);
 
+		// VGK Patcher commands
+		const CLI::App* const vgkpp  = init_vgkpp(app);
+		const CLI::App* const vgkppw = init_vgkppw(app);
+		const CLI::App* const vgkrp  = init_vgkrp(app);
+		const CLI::App* const vgki   = init_vgki(app);
+
 		try
 		{
 			app.parse(command);
@@ -491,6 +590,11 @@ namespace
 			PROCESS_COMMAND(lkm);
 			PROCESS_COMMAND(kme);
 			PROCESS_COMMAND(dkm);
+			// VGK Patcher
+			PROCESS_COMMAND(vgkpp);
+			PROCESS_COMMAND(vgkppw);
+			PROCESS_COMMAND(vgkrp);
+			PROCESS_COMMAND(vgki);
 		}
 		catch (const CLI::ParseError& e)
 		{
